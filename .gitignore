@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Environments and secrets
+.venv/
+venv/
+.env
+
+# Eval transcripts (can be large; regenerate with evals/run_evals.py)
+evals/transcripts/
