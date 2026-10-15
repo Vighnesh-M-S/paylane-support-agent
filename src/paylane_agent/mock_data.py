@@ -149,3 +149,8 @@ def escalate_to_human(customer_id: str | None, summary: str) -> dict:
 def tickets() -> dict:
     """Test/eval helper: everything handed to humans so far."""
     return _db["tickets"]
+
+
+def refunds() -> dict:
+    """Test/eval helper: every refund issued so far."""
+    return _db["refunds"]

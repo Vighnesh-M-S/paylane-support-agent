@@ -27,6 +27,9 @@ class Session:
     # Internal only: the record the most recent attempted email matched, if any.
     # Lets an unverified handoff ticket reference the account. Never shown to the model.
     claimed_customer_id: str | None = None
+    # Chat history (OpenAI message format, without the system prompt). Not security state:
+    # nothing in tools.py reads it, so clearing or rewriting it can't unlock anything.
+    messages: list[dict] = field(default_factory=list)
 
     @property
     def policy_violations(self) -> list[dict]:

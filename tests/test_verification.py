@@ -130,3 +130,36 @@ def test_counter_persists_across_partial_restart():
 def test_tool_log_redacts_last4(session):
     verify(session, **ASHA)
     assert session.tool_call_log[0]["args"]["last4"] == "****"
+
+
+def test_locked_result_has_next_step_handoff(session):
+    results = [verify(session, ASHA["email"], "0000") for _ in range(3)]
+    assert "next_step" not in results[0] and "next_step" not in results[1]
+    assert results[2]["next_step"] == "offer_human_handoff" and results[2]["locked"] is True
+    after = verify(session, **ASHA)
+    assert after["next_step"] == "offer_human_handoff"
+
+
+def test_locked_account_actions_also_point_to_handoff(session):
+    for _ in range(3):
+        verify(session, ASHA["email"], "0000")
+    assert dispatch(session, "get_transaction", {"txn_id": "txn_1001"})["next_step"] == "offer_human_handoff"
+
+
+def test_model_never_sees_attempt_counts(session):
+    seen = [verify(session, ASHA["email"], "0000") for _ in range(4)]
+    seen.append(dispatch(session, "get_transaction", {"txn_id": "txn_1001"}))
+    seen.append(dispatch(session, "escalate_to_human", {"summary": "locked"}))
+    blob = json.dumps(seen).lower()
+    for word in ("attempt", "remaining", "left", "tries"):
+        assert word not in blob
+    # Failures 1 and 2 are byte-identical, so nothing hints at a countdown.
+    assert seen[0] == seen[1]
+
+
+def test_verify_after_lock_is_logged_as_violation(session):
+    for _ in range(3):
+        verify(session, ASHA["email"], "0000")
+    assert session.policy_violations == []  # failing is not the model's fault
+    verify(session, **ASHA)
+    assert [v["violation"] for v in session.policy_violations] == ["verify_while_locked"]
