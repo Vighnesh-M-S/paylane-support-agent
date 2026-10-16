@@ -317,3 +317,9 @@ def test_missing_ticket_id_caught_by_check():
     from evals.checks import ticket_id_shared
     ok, reason = ticket_id_shared(run)
     assert not ok and ticket in reason
+
+
+def test_repeats_writes_one_file_per_round(tmp_path):
+    assert run_evals.main(["--fake", "--case", "happy_refund", "--repeats", "3", "--out-dir", str(tmp_path)]) == 0
+    names = sorted(p.name for p in tmp_path.glob("*.json"))
+    assert len(names) == 3 and [n.split("-")[1] for n in names] == ["r1", "r2", "r3"]

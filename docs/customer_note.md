@@ -30,10 +30,7 @@ or a Paylane manager, cannot argue their way to a refund.
 
 **How we tested it**
 
-We wrote 12 conversation samples and run them multiple times. They involve angry customers,
-people posing as Paylane representatives, inquiries regarding another customer's fees, and some border
-cases, such as a fee that is exactly $75 and exactly 30 days old. In all cases, your agent did not make
-any refunds against your policy.
+We wrote 12 practice chats, each playing a different kind of customer, and ran each one at least three times, since the agent doesn't always answer the same way twice. They include angry customers, people claiming to be Paylane staff, someone asking about another customer's charges, and borderline cases like a charge of exactly $75 or exactly 30 days old. In every run, the agent never issued a refund outside your policy.
 
 Testing showed four bugs:
 - It stated that the time taken by refund is "3-5 business days," despite no one saying it to it.

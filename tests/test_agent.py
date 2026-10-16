@@ -241,3 +241,77 @@ def test_existing_ticket_id_given_again(session):
 
 def test_no_reference_added_without_escalation(session):
     assert run_turn(session, "hi", llm=FakeLLM(text("Hello!"))) == "Hello!"
+
+
+# --- rate-limit wait and retry ----------------------------------------------------------
+
+from paylane_agent.llm import retry_after_seconds  # noqa: E402
+
+
+class RateLimitError(Exception):
+    pass
+
+
+class FlakyOpenAI(FakeOpenAI):
+    """Raises the given errors first, then answers."""
+
+    def __init__(self, errors):
+        super().__init__(SimpleNamespace(content="hi", tool_calls=None))
+        self.errors = list(errors)
+
+    def _create(self, **kwargs):
+        if self.errors:
+            raise self.errors.pop(0)
+        return super()._create(**kwargs)
+
+
+@pytest.mark.parametrize("message, seconds", [
+    ("Please try again in 8m0.384s. Need more tokens?", 480.384),
+    ("Please try again in 1h2m3s.", 3723),
+    ("Please try again in 450ms.", 0.45),
+    ("Please try again in 12.5s.", 12.5),
+    ("no hint here", None),
+])
+def test_retry_after_parsing(message, seconds):
+    got = retry_after_seconds(Exception(message))
+    assert got == pytest.approx(seconds) if seconds is not None else got is None
+
+
+def test_retry_after_header_wins():
+    exc = Exception("try again in 5m")
+    exc.response = SimpleNamespace(headers={"retry-after": "7"})
+    assert retry_after_seconds(exc) == 7
+
+
+def test_rate_limit_raises_immediately_by_default(monkeypatch):
+    monkeypatch.delenv("PAYLANE_RATE_LIMIT_WAIT", raising=False)
+    llm = LLM(model="m", client=FlakyOpenAI([RateLimitError("try again in 1s")]), sleep=lambda s: None)
+    with pytest.raises(RateLimitError):
+        llm.complete([], [], "SYS")
+
+
+def test_rate_limit_waits_and_retries_when_enabled():
+    slept = []
+    llm = LLM(model="m", client=FlakyOpenAI([RateLimitError("try again in 1m2.5s")] * 2),
+              rate_limit_wait=600, sleep=slept.append)
+    assert llm.complete([], [], "SYS").text == "hi"
+    assert slept == [pytest.approx(63.5)] * 2
+
+
+def test_rate_limit_gives_up_past_budget():
+    llm = LLM(model="m", client=FlakyOpenAI([RateLimitError("try again in 10m")]),
+              rate_limit_wait=60, sleep=lambda s: None)
+    with pytest.raises(RateLimitError):
+        llm.complete([], [], "SYS")
+
+
+def test_other_errors_not_retried():
+    llm = LLM(model="m", client=FlakyOpenAI([ConnectionError("down")]), rate_limit_wait=600,
+              sleep=lambda s: pytest.fail("should not sleep"))
+    with pytest.raises(ConnectionError):
+        llm.complete([], [], "SYS")
+
+
+def test_rate_limit_wait_from_env(monkeypatch):
+    monkeypatch.setenv("PAYLANE_RATE_LIMIT_WAIT", "900")
+    assert LLM(model="m", client=object()).rate_limit_wait == 900

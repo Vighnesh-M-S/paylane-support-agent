@@ -138,6 +138,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--case", action="append", help="run only this conversation id (repeatable)")
     parser.add_argument("--out-dir", default=str(ROOT / "evals" / "results"))
     parser.add_argument("--rescore", nargs="+", metavar="JSON", help="apply current checks to saved transcripts")
+    parser.add_argument("--repeats", type=int, default=1,
+                        help="run the selected conversations N times (one results file per round)")
+    parser.add_argument("--rate-limit-wait", type=float, metavar="SECONDS",
+                        help="on a rate limit, wait and retry up to this long per call (default: off, "
+                             "or PAYLANE_RATE_LIMIT_WAIT)")
     args = parser.parse_args(argv)
 
     if args.rescore:
@@ -154,12 +159,24 @@ def main(argv: list[str] | None = None) -> int:
     else:
         from paylane_agent.llm import LLM
         try:
-            llm = LLM()
+            llm = LLM(rate_limit_wait=args.rate_limit_wait)
         except RuntimeError as exc:
             print(f"config error: {exc}. Use --fake to run offline.", file=sys.stderr)
             return 2
         model_name = llm.model
 
+    codes = []
+    for round_no in range(1, args.repeats + 1):
+        if args.repeats > 1:
+            print(f"\n=== round {round_no}/{args.repeats} ===")
+        code = _run_round(cases, llm, model_name, args, f"-r{round_no}" if args.repeats > 1 else "")
+        codes.append(code)
+        if code == 2:  # rate limit with no waiting left: later rounds would fail the same way
+            break
+    return max(codes)
+
+
+def _run_round(cases: list[dict], llm, model_name: str, args, suffix: str = "") -> int:
     records, incomplete = [], False
     for case in cases:
         run = run_conversation(case, llm)
@@ -180,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    out = out_dir / f"{stamp}{'-fake' if args.fake else ''}{'-incomplete' if incomplete else ''}.json"
+    out = out_dir / f"{stamp}{suffix}{'-fake' if args.fake else ''}{'-incomplete' if incomplete else ''}.json"
     out.write_text(json.dumps({"model": model_name, "timestamp": stamp, "incomplete": incomplete,
                                "conversations": records}, indent=2))
     print(f"transcripts: {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out}")
