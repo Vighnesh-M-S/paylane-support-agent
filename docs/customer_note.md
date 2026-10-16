@@ -6,58 +6,63 @@ Here's where the Paylane support agent stands ahead of next week's launch.
 
 **What it does**
 
-- Answers general questions about refunds and your policy.
-- Checks who it's talking to, using the email on the account and the last 4 digits of the card,
-  before it discusses anything about that account.
-- Refunds a card charge of $75 or less that is under 30 days old, once per charge.
-- Tells a customer when their card is frozen.
-- Passes anything else to your team, with a short summary, so nobody has to start from scratch,
-  and gives the customer a reference number to quote if they get in touch again.
+- Answers your refund questions and your refund policy.
+- Checks who he/she is speaking to by using the email address registered in your account
+  along with the last four digits of the credit card, before mentioning anything related to your account.
+- Provides a refund for any card charge of $75 or less and less than 30 days old, once per charge.
+- Inform a customer that his/her credit card is frozen.
+- Sends everything else to your team with a brief description without starting everything all over again,
+  and gives the customer a reference number.
 
 **What it won't do**
 
-- Refund a charge over $75, a charge 30 days old or older, or the same charge twice. These go to
-  your team.
-- Unfreeze a card, close an account, or deal with legal threats or fraud over $500. These always go
-  to a person.
-- Show a full card number or the email on file. If someone gets their details wrong, it doesn't say
-  which part was wrong. After three wrong tries it stops checking and offers a person instead.
-- Promise timings or outcomes it hasn't been given, such as "3-5 business days".
+- Process a refund for a transaction that is over $75, older than 30 days, or for the same transaction twice.
+These are referred to your team.
+- Lift the freeze of a card, close an account or handle threats of legal action or fraud above $500.
+These are always referred to a person.
+- Provide a full card number or the email address associated with the account. In case the details are incorrect,
+it will not identify what exactly was incorrect. If there were 3 attempts to enter incorrectly, the automated process will not verify
+and will provide a person instead.
+- Offer any promises about timing or resolution that have not been promised, such as "3-5 business days".
 
-These limits are built into the system, not just written into the agent's instructions. A customer
-who argues, or claims to be a Paylane manager, can't talk it into a refund.
+The limitations above are embedded in the process, and not just described in the agent instructions. An angry client,
+or a Paylane manager, cannot argue their way to a refund.
 
 **How we tested it**
 
-We wrote 12 conversations and ran each one several times. They include angry customers, people
-claiming to be Paylane staff, someone asking about another customer's charges, and edge cases like
-a charge of exactly $75 or exactly 30 days old. The agent never issued a refund outside your
-policy.
+We wrote 12 conversation samples and run them multiple times. They involve angry customers,
+people posing as Paylane representatives, inquiries regarding another customer's fees, and some border
+cases, such as a fee that is exactly $75 and exactly 30 days old. In all cases, your agent did not make
+any refunds against your policy.
 
-Testing turned up four problems:
-- It was telling customers refunds take "3-5 business days", which nobody told it. Fixed.
-- It sometimes passed a customer to your team without attaching their account to the ticket, even
-  though they had given their details. Fixed for fraud reports.
-- It opened duplicate tickets for the same problem. Fixed.
-- It didn't always give the customer their reference number after a handover. Fixed: the system now
-  adds it if the agent leaves it out.
+Testing showed four bugs:
+- It stated that the time taken by refund is "3-5 business days," despite no one saying it to it.
+Fixed.
+- It sometimes passed the customer to your support team without attaching their account to the ticket
+even though they provided it. Fixed for fraud complaints.
+- It generated duplicate tickets for the same issue. Fixed.
+- It did not provide the reference number to the client after passing them to you. Fixed: now the system
+automatically adds the number if the agent fails to do it.
 
-One gap is still open. When a customer threatens legal action, it hands them to a person but doesn't
-always attach their account, so your team may need to look them up. We're still working on this.
+There is one outstanding issue. When customers threaten taking the matter to court, it passes them to the
+person, but it sometimes forgets to attach the account to the ticket, and your support team will have to
+find it. We are working on this issue.
 
 **What we need from you before launch**
 
-1. **A charge exactly 30 days old.** Your policy refunds charges "under 30 days" and passes on ones
-   "older than 30 days", so day 30 falls in between. For now we pass it to your team. Is that right?
-2. **Why a card is frozen.** We can only see that a card is frozen, not why. Can we get the reason,
-   so the agent can explain it?
-3. **Part refunds.** Should the agent ever refund part of a charge? Right now it refunds the full
-   amount, and only on charges of $75 or less.
-4. **Refunds to a frozen card.** Allowed? For now we pass these to your team.
-5. **How long refunds take.** If you want customers told, send us the wording and we'll add it.
-6. **Handovers.** Who picks up the tickets, and how quickly? And after three wrong tries, should the
-   customer be locked out for longer than that one chat?
-
+1. **A charge exactly 30 days old.** The policy refunds charges "under 30 days" and processes ones
+   "older than 30 days," so a charge 30 days old would fall in-between. We'll forward the request
+   to your team for the time being. Would that be correct?
+2. **Reasons for a card being frozen.** Our systems know that a card is frozen, but not why. Would
+   you be able to provide the reason in order for the agent to explain it to the customer?
+3. **Part refunds.** Under what circumstances should the agent ever provide a partial refund?
+   Currently, it gives a full refund of any charge under $75.
+4. **Refunds to a frozen card.** Allowed? For now we'll forward them to your team.
+5. **Processing time for refunds.** If you would like customers to be informed about processing
+   time for refunds, provide us with the language and we'll insert it into our knowledge base.
+6. **Handovers.** Who will be receiving the ticket, and how fast? And is there an extended lockout
+   period after three failed attempts at handover?
+   
 Happy to walk you through some real conversations whenever suits you.
 
 Thanks,
