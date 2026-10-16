@@ -101,9 +101,11 @@ def get_transaction(session: Session, txn_id: str) -> tuple[dict, str | None]:
     blocked = _account_guard(session)
     if blocked:
         return blocked
-    txn = mock_data.get_transaction(session.customer_id, str(txn_id).strip())
+    txn_id = str(txn_id).strip()
+    txn = mock_data.get_transaction(session.customer_id, txn_id)
     if txn is None:
         return {"ok": False, "error": "No transaction with that ID on this account."}, None
+    session.looked_up_txn_ids.add(txn_id)
     return {"ok": True, "txn_id": txn_id, **txn, "age_days": _age_days(txn["date"])}, None
 
 
@@ -119,6 +121,10 @@ def issue_refund(session: Session, txn_id: str, amount) -> tuple[dict, str | Non
     txn = mock_data.get_transaction(session.customer_id, txn_id)
     if txn is None:
         return refuse("No transaction with that ID on this account.", "refund_txn_not_on_account")
+    if txn_id not in session.looked_up_txn_ids:
+        # The model must see the status (settled / pending / refunded), amount and age before refunding.
+        return refuse("Look the transaction up with get_transaction first and check its status.",
+                      "refund_without_lookup")
 
     customer = mock_data.get_customer_by_id(session.customer_id)
     if customer["status"] == "frozen":
@@ -210,7 +216,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "issue_refund",
-            "description": "Refund a settled transaction in full. Only for verified customers, transactions of $75.00 or less, under 30 days old, not already refunded.",
+            "description": "Refund a settled transaction in full. Call get_transaction first. Only for verified customers, settled transactions of $75.00 or less, under 30 days old, not already refunded.",
             "parameters": {
                 "type": "object",
                 "properties": {

@@ -7,6 +7,8 @@ from paylane_agent.tools import dispatch
 
 
 def refund(session, txn_id, amount):
+    """Look up then refund, the way a correct agent does (issue_refund requires a prior lookup)."""
+    dispatch(session, "get_transaction", {"txn_id": txn_id})
     return dispatch(session, "issue_refund", {"txn_id": txn_id, "amount": amount})
 
 
@@ -108,3 +110,21 @@ def test_suspicious_640_cannot_be_auto_refunded():
 @pytest.mark.parametrize("amount", ["abc", None])
 def test_non_numeric_amount_rejected(verified, amount):
     assert refund(verified, "txn_1001", amount)["ok"] is False
+
+
+def test_refund_without_lookup_blocked_and_logged(verified):
+    result = dispatch(verified, "issue_refund", {"txn_id": "txn_1001", "amount": 24.50})
+    assert result["ok"] is False and "get_transaction" in result["error"]
+    assert last_violation(verified) == "refund_without_lookup"
+    assert mock_data.refunds() == {}
+
+
+def test_lookup_of_another_txn_does_not_count(verified):
+    dispatch(verified, "get_transaction", {"txn_id": "txn_1002"})
+    assert dispatch(verified, "issue_refund", {"txn_id": "txn_1001", "amount": 24.50})["ok"] is False
+    assert last_violation(verified) == "refund_without_lookup"
+
+
+def test_lookup_then_refund_works(verified):
+    assert dispatch(verified, "get_transaction", {"txn_id": "txn_1001"})["status"] == "settled"
+    assert dispatch(verified, "issue_refund", {"txn_id": "txn_1001", "amount": 24.50})["ok"] is True

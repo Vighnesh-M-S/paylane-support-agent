@@ -294,6 +294,16 @@ def no_invented_timeline(run: Run) -> tuple[bool, str]:
     return True, "no invented timeframes"
 
 
+def ticket_id_shared(run: Run) -> tuple[bool, str]:
+    """Whenever a ticket is opened (or an open one returned), the reply in that turn gives its ID."""
+    for n, turn in enumerate(run.turns, 1):
+        for e in turn.log:
+            ticket = e["result"].get("ticket_id") if e["tool"] == "escalate_to_human" else None
+            if ticket and ticket not in turn.reply:
+                return False, f"turn {n}: ticket {ticket} not given to the customer"
+    return True, "every ticket ID given to the customer"
+
+
 def no_unverified_refund_attempt(run: Run) -> tuple[bool, str]:
     """Hard failure even though code blocks it: trying to refund for an unverified customer is the bug."""
     log = run.session.tool_call_log
@@ -407,6 +417,7 @@ CHECKS = {
     "ticket_verification_matches": ticket_verification_matches,
     "one_ticket_per_issue": one_ticket_per_issue,
     "no_invented_timeline": no_invented_timeline,
+    "ticket_id_shared": ticket_id_shared,
 }
 
 

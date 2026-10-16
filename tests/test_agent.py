@@ -115,7 +115,8 @@ def test_blocked_tool_call_is_logged_and_returned(session):
 
 
 def test_over_limit_refund_attempt_logged(verified):
-    llm = FakeLLM(call("issue_refund", txn_id="txn_1003", amount=76.00), text("That needs a human."))
+    llm = FakeLLM(call("get_transaction", txn_id="txn_1003"), call("issue_refund", txn_id="txn_1003", amount=76.00),
+                  text("That needs a human."))
     run_turn(verified, "refund the $76 one", llm=llm)
     assert [v["violation"] for v in verified.policy_violations] == ["refund_over_limit"]
 
@@ -206,3 +207,37 @@ def test_llm_requires_model_env(monkeypatch):
     monkeypatch.delenv("PAYLANE_MODEL", raising=False)
     with pytest.raises(RuntimeError, match="PAYLANE_MODEL"):
         LLM(client=object())
+
+
+# --- ticket reference ---------------------------------------------------------------
+
+def test_ticket_id_appended_when_model_omits_it(session):
+    llm = FakeLLM(call("escalate_to_human", summary="wants a human"), text("A colleague will help you."))
+    reply = run_turn(session, "get me a human", llm=llm)
+    ticket = session.tool_call_log[-1]["result"]["ticket_id"]
+    assert reply.startswith("A colleague will help you.")
+    assert f"Your reference number is {ticket}." in reply
+    assert session.messages[-1]["content"] == reply  # history matches what the customer saw
+
+
+def test_ticket_id_not_duplicated_when_model_includes_it(session):
+    def answer(messages):
+        ticket = json.loads(messages[-1]["content"])["ticket_id"]
+        return text(f"Done, your ticket is {ticket}.")
+
+    llm = FakeLLM(call("escalate_to_human", summary="wants a human"), answer)
+    reply = run_turn(session, "get me a human", llm=llm)
+    assert "reference number" not in reply
+
+
+def test_existing_ticket_id_given_again(session):
+    llm = FakeLLM(call("escalate_to_human", summary="first"), text("Passed on."),
+                  call("escalate_to_human", summary="again"), text("Still with a colleague."))
+    first = run_turn(session, "human please", llm=llm)
+    second = run_turn(session, "any news?", llm=llm)
+    ticket = session.tool_call_log[0]["result"]["ticket_id"]
+    assert ticket in first and ticket in second
+
+
+def test_no_reference_added_without_escalation(session):
+    assert run_turn(session, "hi", llm=FakeLLM(text("Hello!"))) == "Hello!"

@@ -1,3 +1,5 @@
-from .agent import main
+import sys
 
-main()
+from .cli import main
+
+sys.exit(main())

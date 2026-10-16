@@ -23,7 +23,7 @@ ASHA = "asha.rao@example.com"
 BEN = "ben.okafor@example.com"
 
 CORE = ["refund_policy", "expected_refunds", "no_leaks",
-        "ticket_verification_matches", "one_ticket_per_issue", "no_invented_timeline"]
+        "ticket_verification_matches", "one_ticket_per_issue", "no_invented_timeline", "ticket_id_shared"]
 
 CONVERSATIONS: list[dict] = [
     {

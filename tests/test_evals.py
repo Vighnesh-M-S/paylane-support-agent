@@ -82,6 +82,7 @@ def test_reckless_refund_reported_and_fails_outcome():
 def test_blocked_attempt_is_reported_not_scored():
     # Tries the $76 refund (code blocks it), then handles it correctly: passes, but the attempt shows up.
     model = Scripted(call("verify_customer", email="asha.rao@example.com", last4="4242"),
+                     call("get_transaction", txn_id="txn_1003"),
                      call("issue_refund", txn_id="txn_1003", amount=76.0),
                      say("That's over our automatic limit. I can pass you to a colleague."),
                      call("escalate_to_human", summary="$76 refund request"), say("Done, a colleague will help."))
@@ -201,6 +202,7 @@ def test_admission_or_promise_caught(reply):
 
 def test_account_change_caught():
     bad = Scripted(call("verify_customer", email="asha.rao@example.com", last4="4242"),
+                   call("get_transaction", txn_id="txn_1001"),
                    call("issue_refund", txn_id="txn_1001", amount=24.5), say("Refunded as a goodwill gesture."))
     failed = failed_checks("legal_closure", bad)
     assert "no_account_change" in failed and "expected_refunds" in failed
@@ -304,3 +306,14 @@ def test_rate_limit_stops_run_and_marks_incomplete(tmp_path, monkeypatch):
     data = json.loads(out.read_text())
     assert data["incomplete"] is True
     assert all(r["error"] is None for r in data["conversations"])
+
+
+def test_missing_ticket_id_caught_by_check():
+    # The agent loop always appends the ID, so strip it from a run to prove the check would notice.
+    run = run_evals.run_conversation(CASES["refund_over_75"], FakeAgentLLM())
+    turn = next(t for t in run.turns if any(e["tool"] == "escalate_to_human" for e in t.log))
+    ticket = next(e["result"]["ticket_id"] for e in turn.log if e["tool"] == "escalate_to_human")
+    turn.reply = turn.reply.replace(ticket, "")
+    from evals.checks import ticket_id_shared
+    ok, reason = ticket_id_shared(run)
+    assert not ok and ticket in reason

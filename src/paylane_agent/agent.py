@@ -3,6 +3,7 @@
 `run_turn` sends the chat to the model, runs any tool calls through
 `tools.dispatch` (which enforces policy and logs every call to the session),
 feeds the results back, and repeats until the model answers in plain text.
+The terminal interface lives in cli.py.
 """
 
 from __future__ import annotations
@@ -31,12 +32,14 @@ def run_turn(session: Session, user_message: str, llm=None) -> str:
     """
     llm = llm or _get_default_llm()
     session.messages.append({"role": "user", "content": user_message})
+    turn_start = len(session.tool_call_log)
 
     iterations = 0
     while True:
         response = llm.complete(session.messages, tools.TOOL_SCHEMAS, SYSTEM_PROMPT)
         if not response.tool_calls:
-            text = (response.text or "").strip() or EMPTY_FALLBACK
+            text = _with_ticket_reference((response.text or "").strip() or EMPTY_FALLBACK,
+                                          session.tool_call_log[turn_start:])
             session.messages.append({"role": "assistant", "content": text})
             return text
 
@@ -61,6 +64,16 @@ def run_turn(session: Session, user_message: str, llm=None) -> str:
         iterations += 1
 
 
+def _with_ticket_reference(text: str, turn_log: list[dict]) -> str:
+    """The customer always gets their ticket ID. If the model's reply leaves it out, add it."""
+    tickets = [e["result"]["ticket_id"] for e in turn_log
+               if e["tool"] == "escalate_to_human" and e["result"].get("ticket_id")]
+    missing = [t for t in dict.fromkeys(tickets) if t not in text]
+    if missing:
+        text += f"\n\nYour reference number is {', '.join(missing)}. Please quote it if you contact us again."
+    return text
+
+
 def _run_tool(session: Session, name: str, arguments: str) -> dict:
     """dispatch() logs normal and blocked calls itself; this only catches unexpected crashes."""
     try:
@@ -77,30 +90,3 @@ def _get_default_llm() -> LLM:
         _default_llm = LLM()
     return _default_llm
 
-
-def main() -> None:
-    """Minimal terminal chat: `python -m paylane_agent`. Set PAYLANE_TRACE=1 to print tool calls."""
-    import os
-
-    session = Session()
-    trace = os.environ.get("PAYLANE_TRACE") == "1"
-    print("Paylane support (Ctrl-D to quit)")
-    while True:
-        try:
-            user = input("you> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            break
-        if not user:
-            continue
-        seen = len(session.tool_call_log)
-        try:
-            reply = run_turn(session, user)
-        except Exception as exc:  # network/auth problems with the LLM endpoint
-            print(f"[error talking to model: {type(exc).__name__}: {exc}]")
-            continue
-        if trace:
-            for entry in session.tool_call_log[seen:]:
-                print(f"  [tool] {entry['tool']} {entry['args']} -> {entry['result']}"
-                      + (f"  VIOLATION={entry['violation']}" if entry["violation"] else ""))
-        print(f"agent> {reply}")

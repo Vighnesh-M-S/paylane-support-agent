@@ -22,6 +22,8 @@ class Session:
     failed_attempts: int = 0
     locked: bool = False
     refunded_txn_ids: set[str] = field(default_factory=set)
+    # Transactions the model has looked up this session; issue_refund requires a prior lookup.
+    looked_up_txn_ids: set[str] = field(default_factory=set)
     # Every tool call: {"tool", "args", "result", "violation"}.
     tool_call_log: list[dict] = field(default_factory=list)
     # Internal only: the record the most recent attempted email matched, if any.
