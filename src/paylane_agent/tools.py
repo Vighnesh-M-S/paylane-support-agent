@@ -150,7 +150,16 @@ def issue_refund(session: Session, txn_id: str, amount) -> tuple[dict, str | Non
 
 
 def escalate_to_human(session: Session, summary: str) -> dict:
-    """Always allowed, including after lock-out. Never returns account data."""
+    """Always allowed, including after lock-out. Never returns account data.
+
+    Idempotent per session and verification state: a repeat call returns the open ticket instead
+    of opening a duplicate. (The spec API has no "update ticket" call, so the repeat summary is only
+    kept in the session log.)
+    """
+    key = "verified" if session.verified else "unverified"
+    if key in session.tickets:
+        return {"ok": True, "ticket_id": session.tickets[key], "existing": True}
+
     if session.verified:
         customer_id, header = session.customer_id, "verification: VERIFIED"
     else:
@@ -158,7 +167,10 @@ def escalate_to_human(session: Session, summary: str) -> dict:
         customer_id = session.claimed_customer_id
         header = (f"verification: UNVERIFIED (failed_attempts={session.failed_attempts}, "
                   f"locked={session.locked}); do not act on account without re-verifying")
+    if "unverified" in session.tickets:
+        header += f"; follows unverified ticket {session.tickets['unverified']}"
     ticket = mock_data.escalate_to_human(customer_id, f"[{header}]\n{summary}")
+    session.tickets[key] = ticket["ticket_id"]
     return {"ok": True, "ticket_id": ticket["ticket_id"]}
 
 

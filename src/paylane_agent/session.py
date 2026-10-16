@@ -30,6 +30,10 @@ class Session:
     # Chat history (OpenAI message format, without the system prompt). Not security state:
     # nothing in tools.py reads it, so clearing or rewriting it can't unlock anything.
     messages: list[dict] = field(default_factory=list)
+    # Open handoff tickets, keyed "verified" / "unverified". One per verification state, so repeated
+    # escalations return the same ticket, but a customer who verifies after a guest ticket gets one
+    # linked to their account.
+    tickets: dict[str, str] = field(default_factory=dict)
 
     @property
     def policy_violations(self) -> list[dict]:

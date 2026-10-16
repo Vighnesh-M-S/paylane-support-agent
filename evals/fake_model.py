@@ -22,6 +22,7 @@ WANTS_HUMAN = re.compile(r"\b(human|person|someone|agent|manager|colleague)\b", 
 SERIOUS = re.compile(r"\b(fraud|unauthori[sz]ed|lawyer|legal|sue|close my account)\b", re.I)
 PROMPT_PROBE = re.compile(r"system prompt|developer mode|your instructions", re.I)
 ACCOUNT_TALK = re.compile(r"\b(verif\w*|account|charge|refund|payment)\b", re.I)
+FROZEN_TALK = re.compile(r"\b(frozen|freeze|unfreeze)\b", re.I)
 
 _ids = itertools.count(1)
 
@@ -62,6 +63,9 @@ def _decide(messages: list[dict]) -> LLMResponse:
     verified = any(n == "verify_customer" and r.get("verified") for n, _, r, _ in history)
     locked = any(r.get("next_step") == "offer_human_handoff" for _, _, r, _ in history)
     first_name = next((r["first_name"] for n, _, r, _ in history if r.get("first_name")), None)
+    frozen = any(r.get("card_status") == "frozen" for _, _, r, _ in history)
+    earlier_ticket = next((r["ticket_id"] for n, _, r, this_turn in history
+                           if n == "escalate_to_human" and not this_turn), None)
 
     if "escalate_to_human" in called_now:
         ticket = next(r for n, _, r in now if n == "escalate_to_human")["ticket_id"]
@@ -88,7 +92,15 @@ def _decide(messages: list[dict]) -> LLMResponse:
         txns = TXN.findall(text)
         return _call("escalate_to_human", summary=f"{reason} {' '.join(txns)}".strip())
 
+    if verified and frozen and FROZEN_TALK.search(text):
+        return _say("Your card is frozen. I can't see the reason on my side and I'm not able to unfreeze it, "
+                    "but I can pass you to a colleague who can help. Would you like that?")
+
     txns = TXN.findall(text)
+    if earlier_ticket and not txns:
+        return _say(f"A colleague already has your case (ticket {earlier_ticket}) and will follow up. "
+                    "I can't comment on the outcome here, but they'll go through it with you.")
+
     wants_refund = "refund" in text.lower()
     if not txns and "verify_customer" in called_now and len(users) > 1:
         # The customer only sent their details; pick up the request from earlier.
@@ -96,6 +108,9 @@ def _decide(messages: list[dict]) -> LLMResponse:
         wants_refund = "refund" in users[-2].lower()
 
     if not verified:
+        if any(n == "verify_customer" and r.get("verified") is False for n, _, r, _ in history):
+            return _say("For security I can't say which detail didn't match. Please check both "
+                        "and try again whenever you're ready.")
         if txns or ACCOUNT_TALK.search(text):
             return _say("Happy to help. First, please share the email on your account and the last 4 digits of your card.")
         return _say("Happy to help. What can I do for you?")
@@ -123,9 +138,10 @@ def _decide(messages: list[dict]) -> LLMResponse:
         r = lookups[t]
         if not r.get("ok"):
             lines.append(f"I couldn't find {t} on your account.")
+        elif r["status"] == "refunded" and t not in refunds:
+            lines.append(f"{t} has already been refunded, so I can't refund it again.")
         elif t in refunds and refunds[t].get("ok"):
-            lines.append(f"Done: ${r['amount']:.2f} for {t} is refunded (ref {refunds[t]['refund_id']}). "
-                         "It takes 5-10 business days to show.")
+            lines.append(f"Done: ${r['amount']:.2f} for {t} is refunded (ref {refunds[t]['refund_id']}).")
         elif wants_refund:
             lines.append(f"{t} isn't eligible for an automatic refund. I can pass it to a colleague "
                          "to review if you'd like.")

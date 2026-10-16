@@ -57,3 +57,31 @@ def test_verified_handoff(verified):
 def test_malformed_arguments_do_not_crash(session):
     assert dispatch(session, "escalate_to_human", "{not json")["ok"] is False
     assert dispatch(session, "escalate_to_human", "[1, 2]")["ok"] is False
+
+
+def test_repeat_escalation_returns_same_ticket(verified):
+    first = dispatch(verified, "escalate_to_human", {"summary": "refund over limit"})
+    second = dispatch(verified, "escalate_to_human", {"summary": "customer asked again"})
+    assert second == {"ok": True, "ticket_id": first["ticket_id"], "existing": True}
+    assert len(mock_data.tickets()) == 1
+
+
+def test_repeat_escalation_after_lock_returns_same_ticket(session):
+    lock(session)
+    first = dispatch(session, "escalate_to_human", {"summary": "locked out"})["ticket_id"]
+    again = dispatch(session, "escalate_to_human", {"summary": "let's start over"})
+    assert again["ticket_id"] == first and again["existing"] is True
+    assert len(mock_data.tickets()) == 1
+
+
+def test_verifying_after_guest_ticket_opens_linked_ticket(session):
+    guest = dispatch(session, "escalate_to_human", {"summary": "wants a human"})["ticket_id"]
+    dispatch(session, "verify_customer", ASHA)
+    linked = dispatch(session, "escalate_to_human", {"summary": "fraud report"})
+    assert linked["ticket_id"] != guest and "existing" not in linked
+    tickets = mock_data.tickets()
+    assert tickets[guest]["customer_id"] is None
+    assert tickets[linked["ticket_id"]]["customer_id"] == "cus_001"
+    assert f"follows unverified ticket {guest}" in tickets[linked["ticket_id"]]["summary"]
+    # ...and a third call returns the linked one.
+    assert dispatch(session, "escalate_to_human", {"summary": "again"})["ticket_id"] == linked["ticket_id"]
