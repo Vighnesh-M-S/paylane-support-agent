@@ -164,3 +164,55 @@ def test_export_markdown(results, tmp_path):
 
 def test_main_eval_passthrough(tmp_path):
     assert cli.main(["eval", "--fake", "--case", "happy_refund", "--out-dir", str(tmp_path)]) == 0
+
+
+# --- slash commands and markdown ------------------------------------------------------
+
+def test_slash_alone_lists_commands():
+    out = io.StringIO()
+    cli.chat(llm=FakeLLM(), out=out, read=scripted_input("/"))
+    text = out.getvalue()
+    for cmd in cli.COMMANDS:
+        assert cmd in text
+
+
+def test_partial_command_suggests_match():
+    out = io.StringIO()
+    cli.chat(llm=FakeLLM(), out=out, read=scripted_input("/st", "/x"))
+    text = out.getvalue()
+    assert "did you mean /state?" in text
+    assert "unknown command /x" in text
+
+
+def test_command_matches():
+    assert cli.command_matches("/") == list(cli.COMMANDS)
+    assert cli.command_matches("/tr") == ["/trace"]
+    assert cli.command_matches("/zz") == []
+
+
+def test_completer_only_completes_commands(monkeypatch):
+    import types
+    fake = types.SimpleNamespace(get_line_buffer=lambda: "/t")
+    monkeypatch.setitem(__import__("sys").modules, "readline", fake)
+    assert cli._complete("/t", 0) == "/trace" and cli._complete("/t", 1) is None
+    fake.get_line_buffer = lambda: "refund txn_1001 /t"
+    assert cli._complete("/t", 0) is None
+
+
+def test_render_markdown_without_colour_strips_markers():
+    s = cli.Style(False)
+    assert cli.render_markdown("Your card is **active**. Use `txn_1001`.", s) == "Your card is active. Use txn_1001."
+    assert cli.render_markdown("### Options\n- one", s) == "Options\n- one"
+
+
+def test_render_markdown_with_colour():
+    s = cli.Style(True)
+    assert cli.render_markdown("**active**", s) == "\033[1mactive\033[0m"
+    # bold that wraps across a line break still renders
+    assert cli.render_markdown("**two\n   lines**", s) == "\033[1mtwo\n   lines\033[0m"
+
+
+def test_chat_reply_markdown_rendered():
+    out = io.StringIO()
+    cli.chat(llm=FakeLLM(LLMResponse(text="Your card is **active**.")), out=out, read=scripted_input("status"))
+    assert "Your card is active." in out.getvalue() and "**" not in out.getvalue()

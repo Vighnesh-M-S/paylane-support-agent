@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 import textwrap
@@ -55,6 +56,20 @@ def _wrapped(text: str, indent: str) -> str:
     for para in text.splitlines() or [""]:
         lines.extend(textwrap.wrap(para, width) or [""])
     return "\n".join(indent + line for line in lines)
+
+
+_BOLD = re.compile(r"\*\*(.+?)\*\*", re.S)
+_CODE = re.compile(r"`([^`\n]+)`")
+_HEADING = re.compile(r"^(\s*)#{1,6}\s+(.*)$", re.M)
+
+
+def render_markdown(text: str, s: Style) -> str:
+    """Show the model's light Markdown as terminal styling (**bold**, `code`, # headings).
+
+    Markers are removed either way, so output stays readable without colour."""
+    text = _HEADING.sub(lambda m: m.group(1) + s.bold(m.group(2)), text)
+    text = _BOLD.sub(lambda m: s.bold(m.group(1)), text)
+    return _CODE.sub(lambda m: s.cyan(m.group(1)), text)
 
 
 def tool_summary(entry: dict) -> str:
@@ -100,12 +115,47 @@ def load_env(path: Path) -> None:
 
 # --- chat -------------------------------------------------------------------------
 
-CHAT_HELP = """commands:
-  /trace   toggle showing tool calls
-  /state   show session state (verified, locked, attempts, tickets)
-  /new     start a new chat session (a fresh session, as a new chat would get)
-  /help    this help
-  /quit    exit (or Ctrl-D)"""
+COMMANDS = {
+    "/trace": "toggle showing tool calls",
+    "/state": "show session state (verified, locked, attempts, tickets)",
+    "/new": "start a new chat session (a fresh session, as a new chat would get)",
+    "/help": "show these commands",
+    "/quit": "exit (or Ctrl-D)",
+}
+CHAT_HELP = "commands (type / then Tab to complete; Tab twice lists them):\n" + "\n".join(
+    f"  {cmd:<7}  {desc}" for cmd, desc in COMMANDS.items())
+
+
+def command_matches(prefix: str) -> list[str]:
+    return [c for c in COMMANDS if c.startswith(prefix.lower())]
+
+
+def _complete(text: str, state: int) -> str | None:
+    """readline completer: only completes /commands typed at the start of the line."""
+    import readline
+    line = readline.get_line_buffer()
+    if not line.startswith("/") or " " in line:
+        return None
+    matches = command_matches(text)
+    return matches[state] if state < len(matches) else None
+
+
+def enable_line_editing() -> str | None:
+    """History (up/down arrows) and Tab completion of /commands, when a terminal is attached.
+
+    Returns which line editor is in use ("libedit" or "gnu"), or None if there isn't one."""
+    try:
+        import readline
+    except ImportError:  # e.g. Windows without pyreadline
+        return None
+    readline.set_completer(_complete)
+    readline.set_completer_delims(" \t\n")  # keep "/" as part of the word being completed
+    if "libedit" in (readline.__doc__ or ""):
+        readline.parse_and_bind("bind ^I rl_complete")
+        return "libedit"
+    readline.parse_and_bind("tab: complete")
+    readline.parse_and_bind("set show-all-if-ambiguous on")
+    return "gnu"
 
 
 def chat(trace: bool = False, llm=None, read=input, out=sys.stdout) -> int:
@@ -123,12 +173,17 @@ def chat(trace: bool = False, llm=None, read=input, out=sys.stdout) -> int:
             return 2
     model = getattr(llm, "model", "model")
     session = Session()
+    prompt = s.cyan("you › ")
+    if read is input and sys.stdin.isatty() and enable_line_editing() == "gnu":
+        # GNU readline: mark colour codes as zero-width so it keeps the cursor in the right place.
+        # (libedit mishandles these markers, and copes with the plain prompt.)
+        prompt = re.sub(r"(\033\[[0-9;]*m)", "\001\\1\002", prompt)
 
     print(s.bold("Paylane support") + s.dim(f"  ·  {model}  ·  trace {'on' if trace else 'off'}"), file=out)
-    print(s.dim("Type a message. /help for commands, /quit to exit.\n"), file=out)
+    print(s.dim("Type a message. Type / for commands (Tab completes), /quit to exit.\n"), file=out)
     while True:
         try:
-            user = read(s.cyan("you › ")).strip()
+            user = read(prompt).strip()
         except (EOFError, KeyboardInterrupt):
             print(file=out)
             return 0
@@ -138,7 +193,7 @@ def chat(trace: bool = False, llm=None, read=input, out=sys.stdout) -> int:
             cmd = user.split()[0].lower()
             if cmd in ("/quit", "/exit", "/q"):
                 return 0
-            if cmd == "/help":
+            if cmd in ("/", "/help"):
                 print(s.dim(CHAT_HELP), file=out)
             elif cmd == "/trace":
                 trace = not trace
@@ -151,8 +206,13 @@ def chat(trace: bool = False, llm=None, read=input, out=sys.stdout) -> int:
             elif cmd == "/new":
                 session = Session()
                 print(s.dim("new chat session started"), file=out)
+            elif len(matches := command_matches(cmd)) == 1:
+                print(s.dim(f"did you mean {matches[0]}?"), file=out)
+            elif matches:
+                print(s.dim(f"{cmd} could be: {'  '.join(matches)}"), file=out)
             else:
-                print(s.dim(f"unknown command {cmd}; /help for commands"), file=out)
+                print(s.dim(f"unknown command {cmd}"), file=out)
+                print(s.dim(CHAT_HELP), file=out)
             continue
 
         seen = len(session.tool_call_log)
@@ -167,7 +227,7 @@ def chat(trace: bool = False, llm=None, read=input, out=sys.stdout) -> int:
                 _print_tool(entry, s, out)
         elif any(e.get("violation") for e in new_calls):
             print(s.red("    (a blocked policy violation was attempted; /trace to see tool calls)"), file=out)
-        print(s.green("paylane › ") + _wrapped(reply, " " * 10).lstrip(), file=out)
+        print(s.green("paylane › ") + render_markdown(_wrapped(reply, " " * 10).lstrip(), s), file=out)
         print(file=out)
 
 
@@ -249,7 +309,7 @@ def print_conversation(c: dict, out=sys.stdout) -> None:
         for entry in t["tool_calls"]:
             _print_tool(entry, s, out)
         print(s.green("agent"), file=out)
-        print(_wrapped(t["assistant"], "  "), file=out)
+        print(render_markdown(_wrapped(t["assistant"], "  "), s), file=out)
         print(file=out)
     if c.get("error"):
         print(s.red(f"error: {c['error']}"), file=out)

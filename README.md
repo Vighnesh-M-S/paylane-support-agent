@@ -5,7 +5,8 @@ Python 3.11+, standard library plus the `openai` SDK (any OpenAI-compatible endp
 
 **Status:** the agent, guarded tools and eval suite are implemented and tested (unit tests use a
 scripted fake LLM; evals have run against a real model, see "Failures found and fixed"). The note to
-Paylane's head of support is in [docs/customer_note.md](docs/customer_note.md).
+Paylane's head of support is in [docs/customer_note.md](docs/customer_note.md), and readable
+transcripts of the real runs are in [TRANSCRIPTS.md](TRANSCRIPTS.md).
 
 ## Quick start
 
@@ -37,7 +38,9 @@ Colours switch off when output isn't a terminal or `NO_COLOR` is set.
 ![Chat with --trace](docs/screenshots/chat.png)
 
 Commands inside the chat: `/trace` (tool calls on/off), `/state` (verified, locked, attempts,
-tickets, blocked attempts), `/new` (fresh session), `/help`, `/quit`.
+tickets, blocked attempts), `/new` (fresh session), `/help`, `/quit`. Type `/` and Enter to list
+them, or `/` and Tab to complete (Tab twice lists them). Up/down arrows recall earlier messages.
+The agent's `**bold**` and `` `code` `` are shown as terminal styling.
 
 Test accounts (mock data, see [mock_data.py](src/paylane_agent/mock_data.py)). The agent asks for
 the email and the card's last 4 digits:

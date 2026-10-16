@@ -11,3 +11,6 @@ venv/
 
 # Eval transcripts (regenerate with evals/run_evals.py; git add -f a run to keep it)
 evals/results/
+
+# macOS
+.DS_Store
